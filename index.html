@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Диагностическое тестирование — Анализ данных в экономике</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header><div class="wrap"><div class="eyebrow">ДИАГНОСТИЧЕСКОЕ ТЕСТИРОВАНИЕ</div><h1>Анализ данных в экономике</h1><p>Тестирование по фиксированному учебнику В.И. Соловьева. PDF студенту загружать не нужно.</p></div></header>
+<main class="wrap">
+<section class="card">
+<h2>Как проходить тест</h2>
+<ol>
+<li>Выберите тему из списка. Темы формируются из оглавления индексированного учебника.</li>
+<li>Выберите количество вопросов и нажмите «Начать тест».</li>
+<li>Пишите ответ своими словами. Рекомендуемый объём — <strong>не менее 30 слов</strong>; для определений, методов и алгоритмов лучше дать развернутый ответ.</li>
+<li>Если вопрос касается метода, укажите назначение, основные этапы и условия применения. Если требуется формула — запишите её и объясните обозначения.</li>
+<li>Нажмите «Проверить ответ». Система сравнивает ответ с релевантным материалом выбранной темы.</li>
+<li>Избегайте ответов из 1–2 слов: даже правильное ключевое слово может быть недостаточным для диагностики понимания.</li>
+<li>После проверки нажмите «Следующий вопрос». В пределах одного теста вопрос не повторяется.</li>
+</ol>
+<div class="note"><strong>Важно.</strong> Автоматическая проверка носит диагностический характер. Она оценивает наличие ключевых понятий и сходство ответа с содержательным контекстом темы и не заменяет экспертную оценку преподавателя.</div>
+</section>
+<section class="card">
+<h2>Выбор теста</h2>
+<div id="status" class="status">Загрузка индексированного учебника…</div>
+<div class="grid">
+<label>Тема<select id="topic" disabled></select></label>
+<label>Количество вопросов<select id="count"><option>5</option><option>8</option><option>10</option><option>12</option><option>15</option></select></label>
+</div>
+<button id="start" class="primary" disabled>Начать тест</button>
+</section>
+<section id="test" class="card hidden">
+<div id="qmeta" class="qmeta"></div>
+<h2 id="question"></h2>
+<label>Ваш ответ<textarea id="answer" rows="10" placeholder="Сформулируйте ответ своими словами. Рекомендуется не менее 30 слов."></textarea></label>
+<div class="actions"><button id="check" class="primary">Проверить ответ</button><button id="next" disabled>Следующий вопрос</button></div>
+<div id="feedback"></div>
+<div id="reference" class="reference hidden"></div>
+</section>
+<section id="resultCard" class="card hidden"><h2>Тест завершён</h2><div id="result"></div><button id="restart" class="primary">Пройти ещё раз</button></section>
+</main>
+<footer><div class="wrap">Источник вопросов: индекс учебника В.И. Соловьева «Анализ данных в экономике».</div></footer>
+<script src="app.js"></script>
+</body>
+</html>
