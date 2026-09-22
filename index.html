@@ -7,40 +7,80 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header><div class="wrap"><div class="eyebrow">ДИАГНОСТИЧЕСКОЕ ТЕСТИРОВАНИЕ</div><h1>Анализ данных в экономике</h1><p>Тестирование по фиксированному учебнику В. И. Соловьева. Студенту PDF загружать не нужно.</p></div></header>
+<header>
+<div class="wrap">
+<div class="eyebrow">ДИАГНОСТИЧЕСКОЕ ТЕСТИРОВАНИЕ</div>
+<h1>Анализ данных в экономике</h1>
+<p>Тестирование по фиксированному источнику В. И. Соловьева. Студенту PDF загружать не нужно.</p>
+</div>
+</header>
+
 <main class="wrap">
+
 <section class="card">
 <h2>Как проходить тест</h2>
 <ol>
-<li>Выберите тему из оглавления учебника.</li>
+<li>Выберите тему из оглавления.</li>
 <li>Выберите количество вопросов и нажмите «Начать тест».</li>
 <li>Отвечайте своими словами. Минимального объёма ответа нет.</li>
 <li>Для формулы запишите её и объясните основные обозначения; для метода укажите назначение и основные этапы.</li>
+<li>Если вопрос требует формулу, можно использовать обычные символы клавиатуры: <code>^</code> для степени, <code>!</code> для факториала, <code>/</code> для дроби.</li>
 <li>Нажмите «Проверить ответ» для диагностической оценки.</li>
 <li>«Следующий вопрос» можно нажать в любой момент — вопрос разрешается пропустить.</li>
 </ol>
-<div class="note"><strong>Важно.</strong> Проверка выполняется непосредственно в браузере по теоретическим материалам выбранного раздела. Это диагностическая, а не экспертная оценка.</div>
+<div class="note"><strong>Важно.</strong> Проверка выполняется непосредственно в браузере по структурированному индексу. Это диагностическая, а не экспертная оценка.</div>
 </section>
+
 <section class="card">
 <h2>Выбор теста</h2>
-<div id="status" class="status">Загрузка индекса учебника…</div>
+<div id="status" class="status">Загрузка индекса…</div>
 <div class="grid">
 <label>Тема<select id="topic" disabled></select></label>
 <label>Количество вопросов<select id="count"><option>2</option><option>3</option><option selected>5</option><option>7</option><option>10</option></select></label>
 </div>
 <button id="start" class="primary" disabled>Начать тест</button>
 </section>
+
 <section id="test" class="card hidden">
 <div id="qmeta" class="qmeta"></div>
 <h2 id="question"></h2>
-<label>Ваш ответ<textarea id="answer" rows="10" placeholder="Введите ответ своими словами. Если не знаете ответ, можно сразу перейти к следующему вопросу."></textarea></label><div id="formulaHint" class="formula-hint hidden"></div>
-<div class="actions"><button id="check" class="primary">Проверить ответ</button><button id="next">Следующий вопрос</button></div>
+<label>Ваш ответ
+<textarea id="answer" rows="10" placeholder="Введите ответ своими словами. Если не знаете ответ, можно сразу перейти к следующему вопросу."></textarea>
+</label>
+<div id="formulaHint" class="formula-hint hidden"></div>
+<div class="actions">
+<button id="check" class="primary">Проверить ответ</button>
+<button id="next">Следующий вопрос</button>
+</div>
 <div id="feedback"></div>
 <div id="reference" class="reference hidden"></div>
 </section>
-<section id="resultCard" class="card hidden"><h2>Тест завершён</h2><div id="result"></div><button id="restart" class="primary">Пройти ещё раз</button></section>
+
+<section id="resultCard" class="card hidden">
+<h2>Тест завершён</h2>
+<div id="result"></div>
+<button id="restart" class="primary">Пройти ещё раз</button>
+</section>
+
+<section class="card stats-card">
+<h2>Статистика использования</h2>
+<p class="muted">Статистика хранится локально в браузере на этом устройстве. Она не является общей статистикой всех пользователей.</p>
+<div class="stats-grid">
+<div class="stat"><strong id="stat-generatedTests">0</strong><span>сгенерировано тестов</span></div>
+<div class="stat"><strong id="stat-generatedQuestions">0</strong><span>сгенерировано вопросов</span></div>
+<div class="stat"><strong id="stat-checkedAnswers">0</strong><span>проверено ответов</span></div>
+<div class="stat"><strong id="stat-topics">0</strong><span>тем использовано</span></div>
+<div class="stat"><strong id="stat-repeatedAttempts">0</strong><span>повторных попыток</span></div>
+</div>
+<button id="resetStats" class="secondary">Сбросить локальную статистику</button>
+</section>
+
 </main>
-<footer><div class="wrap">Источник вопросов: структурированный индекс учебника В. И. Соловьева «Анализ данных в экономике».</div></footer>
-<script src="app.js?v=5.3"></script>
+
+<footer>
+<div class="wrap">Источник вопросов: структурированный индекс В. И. Соловьева «Анализ данных в экономике».</div>
+</footer>
+
+<script src="app.js?v=5.4"></script>
 </body>
 </html>

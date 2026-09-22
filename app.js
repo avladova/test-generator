@@ -1,49 +1,528 @@
 const INDEX_PATH='data/soloviev_test_index_v5.json';
-const state={index:null,questions:[],current:0,answers:[]};
+
+const state={
+  index:null,
+  questions:[],
+  current:0,
+  answers:[],
+  currentTopic:null
+};
+
 const $=id=>document.getElementById(id);
-function clean(s){return String(s??'').replace(/\u00ad/g,'').replace(/\u0018/g,'').replace(/\uf0b7/g,' ').replace(/\s+/g,' ').trim()}
-function words(s){return clean(s).toLowerCase().match(/[а-яёa-z0-9]{3,}/g)||[]}
-const STOP=new Set('и в во на за по из к ко от до для с со у о об при не ни что это как так же если то чем где когда который которая которые которое быть был была были является можно нужно их его ее они мы вы нас вам мне меня уже еще только очень более менее также потому поэтому однако таким образом между через после перед над под при этом поскольку чтобы либо ли бы вот здесь там тогда далее теперь данный данная данные данной этого этой такой такая такие свое свои свою которых которые'.split(' '));
-function stem(w){let x=w.toLowerCase();if(x.length<=5)return x;return x.replace(/(иями|ами|ями|ого|ему|ому|ими|ыми|ее|ие|ые|ой|ий|ый|ая|яя|ое|ем|им|ым|ом|ах|ях|ов|ев|ей|ам|ям|ум|ию|ью|ия|ья|ие|ье|у|ю|а|я|ы|и|е|о)$/,'').slice(0,12)}
-function keyset(s){return new Set(words(s).filter(w=>!STOP.has(w)).map(stem))}
-function overlap(a,b){const A=keyset(a),B=keyset(b);if(!A.size||!B.size)return 0;let n=0;A.forEach(x=>{if(B.has(x))n++});return n/Math.max(1,A.size)}
-function theory(sec){return Array.isArray(sec.theory)?sec.theory.map(clean).filter(x=>x.length>=35):[]}
-function validConcept(c){return c&&clean(c.name).length>=3&&clean(c.definition).length>=45&&!/пример|задач|решени|excel|ячейк/i.test(c.definition)}
-function validFormula(f){const x=clean(f?.formula);return !!f&&x.length>=5&&!/пример|задач|решени|excel|ячейк|табл\.|рис\./i.test(x)&&(/[=≤≥∑√]/.test(x)||/[A-ZА-ЯЁ]ₙ/.test(x))}
-function add(out,q,expected,reference,keys,type,sec){out.push({type,question:q,expected:clean(expected),reference:clean(reference),keys:[...new Set(keys.filter(Boolean))].slice(0,18),section:sec})}
-function topicOverrides(sec){
- const title=clean(sec.title),out=[];
- if(title==='Комбинации без повторений'){
-  const r={fact:'Факториалом натурального числа n называется число n! = n(n − 1)(n − 2) ··· 3·2·1. Факториалом нуля по определению является единица: 0! = 1.',arr:'Размещениями из n элементов по k называются упорядоченные подмножества множества S, состоящие из k различных элементов и отличающиеся друг от друга составом элементов или порядком их расположения. Число размещений: Aₙᵏ = n!/(n − k)! = n(n − 1)(n − 2)···(n − k + 1).',perm:'Перестановками из n элементов называются размещения из n элементов по n, то есть упорядоченные подмножества, состоящие из всех элементов множества и отличающиеся только порядком. Число перестановок: Pₙ = n!.',comb:'Сочетаниями из n элементов по k называются подмножества множества S, состоящие из k различных элементов и отличающиеся друг от друга только составом элементов. Число сочетаний: Cₙᵏ = n!/[k!(n − k)!].',sym:'Для сочетаний выполняется равенство Cₙᵏ = Cₙⁿ⁻ᵏ, 0 ≤ k ≤ n.'};
-  add(out,'Как определяется факториал натурального числа n? Запишите формулу n! и укажите, чему равен 0!.',r.fact,r.fact,['факториал','n'],'fact',sec);
-  add(out,'Что называется размещениями из n элементов по k? Чем два размещения могут отличаться друг от друга? Запишите формулу.',r.arr,r.arr,['размещен','состав','порядок'],'arr',sec);
-  add(out,'Что называется перестановками из n элементов? Как связаны перестановки с размещениями и чему равно их число?',r.perm,r.perm,['перестанов','размещен','порядок'],'perm',sec);
-  add(out,'Что называется сочетаниями из n элементов по k? Чем сочетания отличаются друг от друга и чему равно их число?',r.comb,r.comb,['сочетан','состав','n'],'comb',sec);
-  add(out,'Запишите свойство симметрии числа сочетаний и укажите диапазон допустимых значений k.',r.sym,r.sym,['сочетан','симметр'],'sym',sec);return out;
- }
- if(title==='Комбинации с повторениями'){
-  const r={arr:'Размещениями с повторениями из n элементов по k называются упорядоченные подмножества множества S, состоящие из k элементов. Среди элементов размещения могут оказаться одинаковые. Размещения отличаются друг от друга составом элементов или порядком их расположения. Число размещений с повторениями равно n^k.',comb:'Сочетаниями с повторениями из n элементов по k называются неупорядоченные подмножества множества S, состоящие из k элементов. Среди элементов сочетания могут быть одинаковые. Сочетания с повторениями отличаются друг от друга только составом элементов. Число сочетаний с повторениями равно C_{n+k-1}^k = (n+k-1)!/[k!(n-1)!].',k0:'Для k = 0 формулы числа размещений и сочетаний с повторениями справедливы при естественном соглашении о пустом подмножестве.',perm:'Перестановками с повторениями называются перестановки n элементов, среди которых имеются повторяющиеся элементы. Если элементы повторяются n₁, n₂, …, nₘ раз и n₁ + n₂ + … + nₘ = n, то число перестановок с повторениями равно P = n!/(n₁!n₂!…nₘ!).',dist:'Размещения с повторениями учитывают порядок элементов, а сочетания с повторениями порядок не учитывают. В обоих случаях одинаковые элементы могут повторяться.'};
-  add(out,'Что называется размещениями с повторениями из n элементов по k? Укажите, могут ли элементы повторяться, и чем различаются два размещения.',r.arr,r.arr,['размещен','повторен','порядок'],'arrRep',sec);
-  add(out,'Запишите формулу числа размещений с повторениями из n элементов по k. Что обозначают n и k?',r.arr,r.arr,['размещен','повторен','n','k'],'arrRepFormula',sec);
-  add(out,'Что называется сочетаниями с повторениями из n элементов по k? Чем два таких сочетания могут различаться?',r.comb,r.comb,['сочетан','повторен','состав'],'combRep',sec);
-  add(out,'Запишите формулу числа сочетаний с повторениями из n элементов по k. Что обозначают n и k?',r.comb,r.comb,['сочетан','формул','n','k'],'combRepFormula',sec);
-  add(out,'Чем размещения с повторениями отличаются от сочетаний с повторениями по признаку порядка элементов?',r.dist,r.dist,['размещен','сочетан','порядок'],'repCompare',sec);
-  add(out,'Что называется перестановками с повторениями? Запишите условие n₁ + n₂ + … + nₘ = n и формулу числа таких перестановок.',r.perm,r.perm,['перестанов','повторен','n₁'],'permRep',sec);
-  add(out,'Какое утверждение о формулах для k = 0 приводится для размещений и сочетаний с повторениями?',r.k0,r.k0,['k','0','формул'],'k0',sec);return out;
- }
- if(title==='Выбросы'){
-  const r={def:'Выбросами называются значения признака, не попадающие в отрезок [x₀,₂₅ − 1,5IQR; x₀,₇₅ + 1,5IQR].',step:'Первым шагом при поиске выбросов является визуализация данных с помощью диаграмм размаха и диаграмм рассеяния.',decision:'При анализе выбросов необходимо рассматривать каждое значение-кандидат: действительно ли оно является выбросом, либо в данных есть важные специальные подмножества, которые нужно рассматривать отдельно.',variants:'В общем случае возможны следующие варианты работы с выбросами: замена выброса соответствующей границей отрезка [x₀,₂₅ − 1,5IQR; x₀,₇₅ + 1,5IQR] и обработка выброса как пропущенного значения.',fraud:'В некоторых ситуациях выбросы являются важнейшим предметом исследования. Например, при обнаружении мошеннических транзакций по банковским картам именно необычные, нетипичные транзакции представляют основной интерес.',indicator:'Для каждого признака X целесообразно добавить специальный признак Xвыбр., значение которого равно единице, если значение X в данной строке классифицировано как выброс.'};
-  add(out,'Как определяется выброс? Укажите интервал, за пределами которого значение признака считается выбросом.',r.def,r.def,['выброс','iqr','отрезок'],'outlierDef',sec);add(out,'Какой шаг является первым при поиске выбросов? Какие два вида диаграмм для этого используются?',r.step,r.step,['первым','поиск','диаграмм'],'outlierStep',sec);add(out,'Как следует принимать решение о том, является ли значение-кандидат действительно выбросом?',r.decision,r.decision,['кандидат','выброс','подмножеств'],'outlierDecision',sec);add(out,'Какие два варианта обработки выбросов рассматриваются?',r.variants,r.variants,['замен','границ','пропущен'],'outlierVariants',sec);add(out,'Почему выбросы не всегда следует удалять? Приведите ситуацию, когда выбросы сами являются предметом исследования.',r.fraud,r.fraud,['мошен','транзакц','интерес'],'outlierFraud',sec);add(out,'Какой специальный признак Xвыбр. рекомендуется добавить к набору данных и что означает его значение 1?',r.indicator,r.indicator,['xвыбр','единиц','классифицир'],'outlierIndicator',sec);return out;
- }
- return out;
+
+function clean(s){
+  return String(s??'')
+    .replace(/\u00ad/g,'')
+    .replace(/\u0018/g,'')
+    .replace(/\uf0b7/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
 }
-function makeQuestions(sec){const override=topicOverrides(sec);if(override.length)return override;const out=[],cs=(sec.concepts||[]).filter(validConcept),fs=(sec.formulas||[]).filter(validFormula),ms=(sec.methods||[]).filter(m=>m&&clean(m.description).length>=55&&!/пример|задач|решени|excel|ячейк/i.test(m.description)),ts=theory(sec);cs.forEach(c=>{const n=clean(c.name),d=clean(c.definition);add(out,`Что называется «${n}»? Дайте определение и укажите отличительный признак, приведённый в определении.`,d,d,words(n).map(stem),'definition',sec);add(out,`Какими свойствами или признаками характеризуется «${n}»?`,d,d,words(d).filter(w=>!STOP.has(w)).map(stem),'definition',sec)});fs.forEach(f=>{const n=clean(f.name||'формулу'),formula=clean(f.formula),exp=clean(f.explanation||'');add(out,`Запишите ${n}. Объясните, что обозначают основные элементы формулы и при каких условиях она применяется.`,`${formula}. ${exp}`,`${formula}. ${exp}`,words(n+' '+exp).map(stem),'formula',sec)});ms.forEach(m=>add(out,`Каков основной порядок действий или назначение «${clean(m.name||sec.title)}»? Назовите конкретные действия или условия.`,m.description,m.description,words(m.description).filter(w=>!STOP.has(w)).map(stem),'method',sec));ts.forEach(t=>{const low=t.toLowerCase();if(/называется|называются|называют/.test(low)){const m=t.match(/(?:что\s+)?([^,.;:]{3,100})\s+(?:называется|называются|называют)\s+(.+)/i);if(m){add(out,`Что называется «${clean(m[1])}»? Сформулируйте определение.`,t,t,words(m[1]).map(stem),'theory',sec);return}}if(/первым шагом|первый шаг/.test(low))add(out,`Каков первый шаг при описанной процедуре? Укажите его точно.`,t,t,words(t).filter(w=>!STOP.has(w)).map(stem),'theory',sec);else if(/вариант|следующие|способ(а|ы)|случа(е|ях)|услови/.test(low))add(out,`Какие конкретные варианты или условия рассматриваются? Перечислите их.`,t,t,words(t).filter(w=>!STOP.has(w)).map(stem),'theory',sec);else if(/отлича|различа|равно|равна|равны|определя|вычисля|выража/.test(low))add(out,`Какое конкретное правило, соотношение или различие сформулировано в теории? Запишите его и поясните.`,t,t,words(t).filter(w=>!STOP.has(w)).map(stem),'theory',sec)});const uniq=[],seen=new Set();for(const q of out){const k=q.question.toLowerCase();if(!seen.has(k)){seen.add(k);uniq.push(q)}}return uniq}
-function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]]}return x}
-function generate(sec,n){const pool=makeQuestions(sec);if(pool.length<n)return null;return shuffle(pool).slice(0,n)}
-function evaluate(answer,q){const a=clean(answer);if(!a)return{score:0,label:'Ответ не введён',cls:'partial'};const A=keyset(a),C=keyset(q.expected||q.reference||''),expectedWords=[...C].filter(x=>x.length>=4);let matched=0;expectedWords.forEach(x=>{if(A.has(x))matched++});const coverage=expectedWords.length?matched/expectedWords.length:0;const named=(q.keys||[]).filter(x=>A.has(stem(x))).length,namedCoverage=q.keys?.length?named/q.keys.length:0;const sim=overlap(a,q.expected||q.reference||''),qsim=overlap(a,q.question);let score=Math.max(coverage*1.35,namedCoverage*1.15,sim*.95);score-=Math.min(.35,qsim*.65);if(words(a).length<3)score-=.08;score=Math.max(0,Math.min(1,score));let label='Не зачтено',cls='bad';if(score>=.55){label='Зачтено';cls='good'}else if(score>=.30){label='Частично';cls='partial'}return{score,label,cls,matched,total:expectedWords.length,context:q.expected||q.reference||''}}
-function renderQuestion(){const q=state.questions[state.current];if(!q)return;$('qmeta').textContent=`Вопрос ${state.current+1} из ${state.questions.length} · ${q.section.id} ${q.section.title}`;$('question').textContent=q.question;$('answer').value='';$('feedback').innerHTML='';$('reference').classList.add('hidden');$('next').disabled=false;$('check').disabled=false;const hint=$('formulaHint');if(hint){if(q.type==='formula'){hint.innerHTML='<strong>Подсказка по записи формулы:</strong> используйте обычные символы клавиатуры. Для степени — <code>^</code>, факториала — <code>!</code>, дроби — <code>/</code>, скобки — <code>( )</code>. Например, степень можно записать как <code>n^k</code>. Красивое математическое форматирование не требуется.';hint.classList.remove('hidden')}else{hint.classList.add('hidden')}}}
-async function loadIndex(){try{const r=await fetch(INDEX_PATH,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);state.index=await r.json();const secs=Array.isArray(state.index.sections)?state.index.sections:[];if(!secs.length)throw new Error('В индексе нет разделов');const select=$('topic');select.innerHTML='';secs.forEach((s,i)=>{const o=document.createElement('option');o.value=i;o.textContent=`${s.id||''} ${s.title||''}`.trim();select.appendChild(o)});$('topic').disabled=false;$('start').disabled=false;$('status').textContent=`Индекс ${state.index.version||''} загружен: ${state.index.source||'учебник Соловьева'}. Разделов: ${secs.length}.`;}catch(e){$('status').innerHTML=`<strong>Не удалось загрузить индекс.</strong><br>Проверьте путь <code>${INDEX_PATH}</code> и публикацию GitHub Pages.<br><small>${clean(e.message)}</small>`}}
-$('start').onclick=()=>{const sec=state.index.sections[Number($('topic').value)],n=Number($('count').value);state.questions=generate(sec,n);if(!state.questions){$('status').innerHTML=`<strong>Для выбранной темы сейчас доступно менее ${n} достаточно конкретных вопросов.</strong><br>Выберите меньшее количество вопросов или другую тему.`;return}state.current=0;state.answers=[];$('test').classList.remove('hidden');$('resultCard').classList.add('hidden');renderQuestion();window.scrollTo({top:$('test').offsetTop-20,behavior:'smooth'})};
-$('check').onclick=()=>{const q=state.questions[state.current],result=evaluate($('answer').value,q);if(!clean($('answer').value)){$('feedback').innerHTML=`<div class="feedback partial"><strong>${result.label}.</strong><br>Можно перейти к следующему вопросу без проверки.</div>`;return}state.answers[state.current]=result.score;$('feedback').innerHTML=`<div class="feedback ${result.cls}"><div class="score">${Math.round(result.score*100)}%</div><strong>${result.label}</strong><br>Ответ сопоставлен с эталонным содержанием именно этого вопроса, а не с произвольным фрагментом раздела.</div>`;$('reference').innerHTML=`<strong>Основа проверки:</strong><br><br>${clean(result.context).slice(0,3000)}`;$('reference').classList.remove('hidden')};
-$('next').onclick=()=>{if(state.current+1>=state.questions.length){const checked=state.answers.filter(x=>typeof x==='number'),avg=checked.length?checked.reduce((a,b)=>a+b,0)/checked.length:0;$('test').classList.add('hidden');$('resultCard').classList.remove('hidden');$('result').innerHTML=`<div class="score">${checked.length?Math.round(avg*100)+'%':'—'}</div><p>Проверено ответов: ${checked.length} из ${state.questions.length}. Пропущенные вопросы не считаются ошибкой.</p>`;window.scrollTo({top:$('resultCard').offsetTop-20,behavior:'smooth'});return}state.current++;renderQuestion()};
-$('restart').onclick=()=>{$('resultCard').classList.add('hidden');$('test').classList.add('hidden');window.scrollTo({top:0,behavior:'smooth'})};loadIndex();
+
+function words(s){
+  return clean(s).toLowerCase().match(/[а-яёa-z0-9]{3,}/g)||[];
+}
+
+const STOP=new Set('и в во на за по из к ко от до для с со у о об при не ни что это как так же если то чем где когда который которая которые которое быть был была были является можно нужно их его ее они мы вы нас вам мне меня уже еще только очень более менее также потому поэтому однако таким образом между через после перед над под при этом поскольку чтобы либо ли бы вот здесь там тогда далее теперь данный данная данные данной этого этой такой такая такие свое свои свою которых которые'.split(' '));
+
+function stem(w){
+  let x=w.toLowerCase();
+  if(x.length<=5)return x;
+  return x.replace(/(иями|ами|ями|ого|ему|ому|ими|ыми|ее|ие|ые|ой|ий|ый|ая|яя|ое|ем|им|ым|ом|ах|ях|ов|ев|ей|ам|ям|ум|ию|ью|ия|ья|ие|ье|у|ю|а|я|ы|и|е|о)$/,'').slice(0,12);
+}
+
+function keyset(s){
+  return new Set(words(s).filter(w=>!STOP.has(w)).map(stem));
+}
+
+function overlap(a,b){
+  const A=keyset(a),B=keyset(b);
+  if(!A.size||!B.size)return 0;
+  let n=0;
+  A.forEach(x=>{if(B.has(x))n++});
+  return n/Math.max(1,A.size);
+}
+
+function theory(sec){
+  return Array.isArray(sec.theory)?sec.theory.map(clean).filter(x=>x.length>=35):[];
+}
+
+function validConcept(c){
+  return c&&clean(c.name).length>=3&&clean(c.definition).length>=45&&!/пример|задач|решени|excel|ячейк/i.test(c.definition);
+}
+
+function validFormula(f){
+  const x=clean(f?.formula);
+  return !!f&&x.length>=5&&!/пример|задач|решени|excel|ячейк|табл\.|рис\./i.test(x)&&(/[=≤≥∑√]/.test(x)||/[A-ZА-ЯЁ]ₙ/.test(x));
+}
+
+function add(out,q,expected,reference,keys,type,sec,extra={}){
+  out.push({
+    type,
+    question:q,
+    expected:clean(expected),
+    reference:clean(reference),
+    keys:[...new Set(keys.filter(Boolean))].slice(0,18),
+    section:sec,
+    ...extra
+  });
+}
+
+function topicOverrides(sec){
+  const title=clean(sec.title),out=[];
+
+  if(title==='Комбинации без повторений'){
+    const r={
+      fact:'Факториалом натурального числа n называется число n! = n(n − 1)(n − 2) ··· 3·2·1. Факториалом нуля по определению является единица: 0! = 1.',
+      arr:'Размещениями из n элементов по k называются упорядоченные подмножества множества S, состоящие из k различных элементов и отличающиеся друг от друга составом элементов или порядком их расположения. Число размещений: Aₙᵏ = n!/(n − k)! = n(n − 1)(n − 2)···(n − k + 1).',
+      perm:'Перестановками из n элементов называются размещения из n элементов по n, то есть упорядоченные подмножества, состоящие из всех элементов множества и отличающиеся только порядком. Число перестановок: Pₙ = n!.',
+      comb:'Сочетаниями из n элементов по k называются подмножества множества S, состоящие из k различных элементов и отличающиеся друг от друга только составом элементов. Число сочетаний: Cₙᵏ = n!/[k!(n − k)!].',
+      sym:'Для сочетаний выполняется равенство Cₙᵏ = Cₙⁿ⁻ᵏ, 0 ≤ k ≤ n.'
+    };
+    add(out,'Как определяется факториал натурального числа n? Запишите формулу n! и укажите, чему равен 0!.',r.fact,r.fact,['факториал','n'],'fact',sec);
+    add(out,'Что называется размещениями из n элементов по k? Чем два размещения могут отличаться друг от друга? Запишите формулу.',r.arr,r.arr,['размещен','состав','порядок'],'arr',sec);
+    add(out,'Что называется перестановками из n элементов? Как связаны перестановки с размещениями и чему равно их число?',r.perm,r.perm,['перестанов','размещен','порядок'],'perm',sec);
+    add(out,'Что называется сочетаниями из n элементов по k? Чем сочетания отличаются друг от друга и чему равно их число?',r.comb,r.comb,['сочетан','состав','n'],'comb',sec);
+    add(out,'Запишите свойство симметрии числа сочетаний и укажите диапазон допустимых значений k.',r.sym,r.sym,['сочетан','симметр'],'sym',sec);
+    return out;
+  }
+
+  if(title==='Комбинации с повторениями'){
+    const r={
+      arr:'Размещениями с повторениями из n элементов по k называются упорядоченные подмножества множества S, состоящие из k элементов. Среди элементов размещения могут оказаться одинаковые. Размещения отличаются друг от друга составом элементов или порядком их расположения. Число размещений с повторениями равно n^k.',
+      comb:'Сочетаниями с повторениями из n элементов по k называются неупорядоченные подмножества множества S, состоящие из k элементов. Среди элементов сочетания могут быть одинаковые. Сочетания с повторениями отличаются друг от друга только составом элементов. Число сочетаний с повторениями равно C_{n+k-1}^k = (n+k-1)!/[k!(n-1)!].',
+      k0:'Для k = 0 формулы числа размещений и сочетаний с повторениями справедливы при естественном соглашении о пустом подмножестве.',
+      perm:'Перестановками с повторениями называются перестановки n элементов, среди которых имеются повторяющиеся элементы. Если элементы повторяются n₁, n₂, …, nₘ раз и n₁ + n₂ + … + nₘ = n, то число перестановок с повторениями равно P = n!/(n₁!n₂!…nₘ!).',
+      dist:'Размещения с повторениями учитывают порядок элементов, а сочетания с повторениями порядок не учитывают. В обоих случаях одинаковые элементы могут повторяться.'
+    };
+    add(out,'Что называется размещениями с повторениями из n элементов по k? Укажите, могут ли элементы повторяться, и чем различаются два размещения.',r.arr,r.arr,['размещен','повторен','порядок'],'arrRep',sec);
+    add(out,'Запишите формулу числа размещений с повторениями из n элементов по k. Что обозначают n и k?',r.arr,r.arr,['размещен','повторен','n','k'],'arrRepFormula',sec);
+    add(out,'Что называется сочетаниями с повторениями из n элементов по k? Чем два таких сочетания могут различаться?',r.comb,r.comb,['сочетан','повторен','состав'],'combRep',sec);
+    add(out,'Запишите формулу числа сочетаний с повторениями из n элементов по k. Что обозначают n и k?',r.comb,r.comb,['сочетан','формул','n','k'],'combRepFormula',sec);
+    add(out,'Чем размещения с повторениями отличаются от сочетаний с повторениями по признаку порядка элементов?',r.dist,r.dist,['размещен','сочетан','порядок'],'repCompare',sec);
+    add(out,'Что называется перестановками с повторениями? Запишите условие n₁ + n₂ + … + nₘ = n и формулу числа таких перестановок.',r.perm,r.perm,['перестанов','повторен','n₁'],'permRep',sec);
+    add(out,'Какое утверждение о формулах для k = 0 приводится для размещений и сочетаний с повторениями?',r.k0,r.k0,['k','0','формул'],'k0',sec);
+    return out;
+  }
+
+  if(title==='Выбросы'){
+    const r={
+      def:'Выбросами называются значения признака, не попадающие в отрезок [x₀,₂₅ − 1,5IQR; x₀,₇₅ + 1,5IQR].',
+      step:'Первым шагом при поиске выбросов является визуализация данных с помощью диаграмм размаха и диаграмм рассеяния.',
+      decision:'При анализе выбросов необходимо рассматривать каждое значение-кандидат: действительно ли оно является выбросом, либо в данных есть важные специальные подмножества, которые нужно рассматривать отдельно.',
+      variants:'В общем случае возможны следующие варианты работы с выбросами: замена выброса соответствующей границей отрезка [x₀,₂₅ − 1,5IQR; x₀,₇₅ + 1,5IQR] и обработка выброса как пропущенного значения.',
+      fraud:'В некоторых ситуациях выбросы являются важнейшим предметом исследования. Например, при обнаружении мошеннических транзакций по банковским картам именно необычные, нетипичные транзакции представляют основной интерес.',
+      indicator:'Для каждого признака X целесообразно добавить специальный признак Xвыбр., значение которого равно единице, если значение X в данной строке классифицировано как выброс.'
+    };
+    add(out,'Как определяется выброс? Укажите интервал, за пределами которого значение признака считается выбросом.',r.def,r.def,['выброс','iqr','отрезок'],'outlierDef',sec);
+    add(out,'Какой шаг является первым при поиске выбросов? Какие два вида диаграмм для этого используются?',r.step,r.step,['первым','поиск','диаграмм'],'outlierStep',sec);
+    add(out,'Как следует принимать решение о том, является ли значение-кандидат действительно выбросом?',r.decision,r.decision,['кандидат','выброс','подмножеств'],'outlierDecision',sec);
+    add(out,'Какие два варианта обработки выбросов рассматриваются?',r.variants,r.variants,['замен','границ','пропущен'],'outlierVariants',sec);
+    add(out,'Почему выбросы не всегда следует удалять? Приведите ситуацию, когда выбросы сами являются предметом исследования.',r.fraud,r.fraud,['мошен','транзакц','интерес'],'outlierFraud',sec);
+    add(out,'Какой специальный признак Xвыбр. рекомендуется добавить к набору данных и что означает его значение 1?',r.indicator,r.indicator,['xвыбр','единиц','классифицир'],'outlierIndicator',sec);
+    return out;
+  }
+
+  return out;
+}
+
+function makeQuestions(sec){
+  const override=topicOverrides(sec);
+  if(override.length)return override;
+
+  const out=[],
+    cs=(sec.concepts||[]).filter(validConcept),
+    fs=(sec.formulas||[]).filter(validFormula),
+    ms=(sec.methods||[]).filter(m=>m&&clean(m.description).length>=55&&!/пример|задач|решени|excel|ячейк/i.test(m.description)),
+    ts=theory(sec);
+
+  cs.forEach(c=>{
+    const n=clean(c.name),d=clean(c.definition);
+    add(out,`Что называется «${n}»? Дайте определение и укажите отличительный признак, приведённый в определении.`,d,d,words(n).map(stem),'definition',sec);
+    add(out,`Какими свойствами или признаками характеризуется «${n}»?`,d,d,words(d).filter(w=>!STOP.has(w)).map(stem),'definition',sec);
+  });
+
+  fs.forEach(f=>{
+    const n=clean(f.name||'формулу'),formula=clean(f.formula),exp=clean(f.explanation||'');
+    add(out,`Запишите ${n}. Объясните, что обозначают основные элементы формулы и при каких условиях она применяется.`,`${formula}. ${exp}`,`${formula}. ${exp}`,words(n+' '+exp).map(stem),'formula',sec,{formula_answer:formula});
+  });
+
+  ms.forEach(m=>add(out,`Каков основной порядок действий или назначение «${clean(m.name||sec.title)}»? Назовите конкретные действия или условия.`,m.description,m.description,words(m.description).filter(w=>!STOP.has(w)).map(stem),'method',sec));
+
+  ts.forEach(t=>{
+    const low=t.toLowerCase();
+    if(/называется|называются|называют/.test(low)){
+      const m=t.match(/(?:что\s+)?([^,.;:]{3,100})\s+(?:называется|называются|называют)\s+(.+)/i);
+      if(m){
+        add(out,`Что называется «${clean(m[1])}»? Сформулируйте определение.`,t,t,words(m[1]).map(stem),'theory',sec);
+        return;
+      }
+    }
+    if(/первым шагом|первый шаг/.test(low))
+      add(out,`Каков первый шаг при описанной процедуре? Укажите его точно.`,t,t,words(t).filter(w=>!STOP.has(w)).map(stem),'theory',sec);
+    else if(/вариант|следующие|способ(а|ы)|случа(е|ях)|услови/.test(low))
+      add(out,`Какие конкретные варианты или условия рассматриваются? Перечислите их.`,t,t,words(t).filter(w=>!STOP.has(w)).map(stem),'theory',sec);
+    else if(/отлича|различа|равно|равна|равны|определя|вычисля|выража/.test(low))
+      add(out,`Какое конкретное правило, соотношение или различие сформулировано в теории? Запишите его и поясните.`,t,t,words(t).filter(w=>!STOP.has(w)).map(stem),'theory',sec);
+  });
+
+  const uniq=[],seen=new Set();
+  for(const q of out){
+    const k=q.question.toLowerCase();
+    if(!seen.has(k)){seen.add(k);uniq.push(q);}
+  }
+  return uniq;
+}
+
+function shuffle(a){
+  const x=[...a];
+  for(let i=x.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [x[i],x[j]]=[x[j],x[i]];
+  }
+  return x;
+}
+
+function generate(sec,n){
+  const pool=makeQuestions(sec);
+  if(pool.length<n)return null;
+  return shuffle(pool).slice(0,n);
+}
+
+/* ---------- Формульная проверка ---------- */
+
+const SUPER_TO_NORMAL={
+  '⁰':'^0','¹':'^1','²':'^2','³':'^3','⁴':'^4',
+  '⁵':'^5','⁶':'^6','⁷':'^7','⁸':'^8','⁹':'^9'
+};
+
+const SUB_TO_NORMAL={
+  '₀':'_0','₁':'_1','₂':'_2','₃':'_3','₄':'_4',
+  '₅':'_5','₆':'_6','₇':'_7','₈':'_8','₉':'_9'
+};
+
+function normalizeFormula(s){
+  let x=clean(s).toLowerCase();
+
+  Object.entries(SUPER_TO_NORMAL).forEach(([a,b])=>{x=x.split(a).join(b);});
+  Object.entries(SUB_TO_NORMAL).forEach(([a,b])=>{x=x.split(a).join(b);});
+
+  x=x
+    .replace(/−|–|—/g,'-')
+    .replace(/×|·|∙/g,'*')
+    .replace(/⁄|∕/g,'/')
+    .replace(/[{}\[\]]/g,m=>m==='{'||m==='['?'(':')')
+    .replace(/\\frac/g,'/')
+    .replace(/\s+/g,'');
+
+  /* Cₙᵏ, Aₙᵏ, Pₙ и варианты с индексами приводим к единой записи. */
+  x=x.replace(/\b([cap])_?n\^?k\b/g,'$1(n,k)');
+  x=x.replace(/\b([cap])\^?k_?n\b/g,'$1(n,k)');
+  x=x.replace(/\bp_?n\b/g,'p(n)');
+
+  /* Убираем необязательные знаки умножения вокруг скобок и двойные скобки. */
+  x=x.replace(/\(\(/g,'(').replace(/\)\)/g,')');
+  x=x.replace(/(\d|[a-z)])\*/g,'$1*');
+  x=x.replace(/\*/g,'*');
+
+  return x;
+}
+
+function formulaTokens(s){
+  return normalizeFormula(s)
+    .replace(/[^a-z0-9()+\-*/^_=.,:]/g,'')
+    .replace(/=/g,'=')
+    .split(/(?=[()+\-*/^_=,:])|(?<=[()+\-*/^_=,:])/)
+    .filter(Boolean);
+}
+
+function formulasEquivalent(student,expected){
+  const a=normalizeFormula(student);
+  const b=normalizeFormula(expected);
+  if(!a||!b)return false;
+  if(a===b)return true;
+
+  /* Убираем только различия записи, не математическое содержание. */
+  const compact=x=>x
+    .replace(/;+/g,'')
+    .replace(/,+/g,',')
+    .replace(/\s/g,'')
+    .replace(/\*+/g,'*')
+    .replace(/\(\)/g,'');
+
+  if(compact(a)===compact(b))return true;
+
+  /* Допускаем эквивалентную запись дроби с квадратными/круглыми скобками
+     и Unicode-записью основных комбинаторных обозначений. */
+  const ca=compact(a), cb=compact(b);
+  if(ca.replace(/\(([^()]*)\)/g,'[$1]')===cb.replace(/\(([^()]*)\)/g,'[$1]'))return true;
+
+  return false;
+}
+
+/* ---------- Статистика использования ---------- */
+
+const STATS_KEY='soloviev_test_generator_stats_v1';
+
+function emptyStats(){
+  return {
+    generatedTests:0,
+    generatedQuestions:0,
+    checkedAnswers:0,
+    topics:[],
+    repeatedAttempts:0
+  };
+}
+
+function loadStats(){
+  try{
+    const raw=localStorage.getItem(STATS_KEY);
+    if(!raw)return emptyStats();
+    const s={...emptyStats(),...JSON.parse(raw)};
+    if(!Array.isArray(s.topics))s.topics=[];
+    return s;
+  }catch(e){
+    return emptyStats();
+  }
+}
+
+function saveStats(s){
+  try{localStorage.setItem(STATS_KEY,JSON.stringify(s));}catch(e){}
+}
+
+function registerTestGenerated(sec,n){
+  const s=loadStats();
+  const topicId=`${sec.id||''} ${sec.title||''}`.trim();
+  const already=s.topics.includes(topicId);
+  s.generatedTests+=1;
+  s.generatedQuestions+=n;
+  if(already)s.repeatedAttempts+=1;
+  else s.topics.push(topicId);
+  saveStats(s);
+  renderStats();
+}
+
+function registerCheckedAnswer(){
+  const s=loadStats();
+  s.checkedAnswers+=1;
+  saveStats(s);
+  renderStats();
+}
+
+function renderStats(){
+  const s=loadStats();
+  const map={
+    generatedTests:s.generatedTests,
+    generatedQuestions:s.generatedQuestions,
+    checkedAnswers:s.checkedAnswers,
+    topics:s.topics.length,
+    repeatedAttempts:s.repeatedAttempts
+  };
+  Object.entries(map).forEach(([id,value])=>{
+    const el=$('stat-'+id);
+    if(el)el.textContent=value;
+  });
+}
+
+function resetStats(){
+  saveStats(emptyStats());
+  renderStats();
+}
+
+/* ---------- Оценивание ---------- */
+
+function evaluate(answer,q){
+  const a=clean(answer);
+
+  if(!a){
+    return{score:0,label:'Ответ не введён',cls:'partial'};
+  }
+
+  if(q.type==='formula'){
+    const formulaExpected=q.formula_answer||q.expected||'';
+    const formulaOk=formulasEquivalent(a,formulaExpected);
+    const explanationPart=clean(q.expected||'').replace(formulaExpected,'');
+    let explanationScore=0;
+
+    if(explanationPart.length>20){
+      const A=keyset(a),C=keyset(explanationPart);
+      let matched=0;
+      C.forEach(x=>{if(A.has(x))matched++;});
+      explanationScore=C.size?matched/C.size:0;
+    }
+
+    const score=formulaOk
+      ?Math.min(1,0.75+explanationScore*0.25)
+      :Math.max(0,explanationScore*0.35);
+
+    const label=formulaOk?'Зачтено':'Не зачтено';
+    const cls=formulaOk?'good':'bad';
+
+    return{
+      score,
+      label,
+      cls,
+      context:q.expected||q.reference||'',
+      formulaOk
+    };
+  }
+
+  const A=keyset(a),
+    C=keyset(q.expected||q.reference||''),
+    expectedWords=[...C].filter(x=>x.length>=4);
+
+  let matched=0;
+  expectedWords.forEach(x=>{if(A.has(x))matched++;});
+
+  const coverage=expectedWords.length?matched/expectedWords.length:0;
+  const named=(q.keys||[]).filter(x=>A.has(stem(x))).length;
+  const namedCoverage=q.keys?.length?named/q.keys.length:0;
+  const sim=overlap(a,q.expected||q.reference||'');
+  const qsim=overlap(a,q.question);
+
+  let score=Math.max(coverage*1.35,namedCoverage*1.15,sim*.95);
+  score-=Math.min(.35,qsim*.65);
+  if(words(a).length<3)score-=.08;
+  score=Math.max(0,Math.min(1,score));
+
+  let label='Не зачтено',cls='bad';
+  if(score>=.55){label='Зачтено';cls='good';}
+  else if(score>=.30){label='Частично';cls='partial';}
+
+  return{
+    score,
+    label,
+    cls,
+    matched,
+    total:expectedWords.length,
+    context:q.expected||q.reference||''
+  };
+}
+
+function renderQuestion(){
+  const q=state.questions[state.current];
+  if(!q)return;
+
+  $('qmeta').textContent=`Вопрос ${state.current+1} из ${state.questions.length} · ${q.section.id} ${q.section.title}`;
+  $('question').textContent=q.question;
+  $('answer').value='';
+  $('feedback').innerHTML='';
+  $('reference').classList.add('hidden');
+  $('next').disabled=false;
+  $('check').disabled=false;
+
+  const hint=$('formulaHint');
+  if(hint){
+    if(q.type==='formula'){
+      hint.innerHTML='<strong>Подсказка по записи формулы:</strong> используйте обычные символы клавиатуры. Для степени — <code>^</code>, факториала — <code>!</code>, дроби — <code>/</code>, скобки — <code>( )</code>. Например, степень можно записать как <code>n^k</code>. Красивое математическое форматирование не требуется.';
+      hint.classList.remove('hidden');
+    }else{
+      hint.classList.add('hidden');
+    }
+  }
+}
+
+async function loadIndex(){
+  try{
+    const r=await fetch(INDEX_PATH,{cache:'no-store'});
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    state.index=await r.json();
+
+    const secs=Array.isArray(state.index.sections)?state.index.sections:[];
+    if(!secs.length)throw new Error('В индексе нет разделов');
+
+    const select=$('topic');
+    select.innerHTML='';
+
+    secs.forEach((s,i)=>{
+      const o=document.createElement('option');
+      o.value=i;
+      o.textContent=`${s.id||''} ${s.title||''}`.trim();
+      select.appendChild(o);
+    });
+
+    $('topic').disabled=false;
+    $('start').disabled=false;
+    $('status').textContent=`Индекс ${state.index.version||''} загружен: ${state.index.source||'фиксированный источник'}. Разделов: ${secs.length}.`;
+
+    renderStats();
+  }catch(e){
+    $('status').innerHTML=`<strong>Не удалось загрузить индекс.</strong><br>Проверьте путь <code>${INDEX_PATH}</code> и публикацию GitHub Pages.<br><small>${clean(e.message)}</small>`;
+  }
+}
+
+$('start').onclick=()=>{
+  const sec=state.index.sections[Number($('topic').value)];
+  const n=Number($('count').value);
+  const generated=generate(sec,n);
+
+  if(!generated){
+    $('status').innerHTML=`<strong>Для выбранной темы сейчас доступно менее ${n} достаточно конкретных вопросов.</strong><br>Выберите меньшее количество вопросов или другую тему.`;
+    return;
+  }
+
+  state.questions=generated;
+  state.current=0;
+  state.answers=[];
+  state.currentTopic=sec;
+
+  registerTestGenerated(sec,n);
+
+  $('test').classList.remove('hidden');
+  $('resultCard').classList.add('hidden');
+  renderQuestion();
+  window.scrollTo({top:$('test').offsetTop-20,behavior:'smooth'});
+};
+
+$('check').onclick=()=>{
+  const q=state.questions[state.current];
+  const raw=$('answer').value;
+
+  if(!clean(raw)){
+    $('feedback').innerHTML='<div class="feedback partial"><strong>Ответ не введён.</strong><br>Можно перейти к следующему вопросу без проверки.</div>';
+    return;
+  }
+
+  const result=evaluate(raw,q);
+  state.answers[state.current]=result.score;
+  registerCheckedAnswer();
+
+  const formulaNote=q.type==='formula'
+    ?`<br><small>${result.formulaOk?'Формула распознана как математически эквивалентная эталонной записи.':'Формула не распознана как эквивалентная эталонной записи. Проверьте скобки, знаки операций и обозначения.'}</small>`
+    :'';
+
+  $('feedback').innerHTML=`<div class="feedback ${result.cls}"><div class="score">${Math.round(result.score*100)}%</div><strong>${result.label}</strong>${formulaNote}<br><small>Ответ сопоставлен с эталонным содержанием именно этого вопроса.</small></div>`;
+
+  $('reference').innerHTML=`<strong>Основа проверки:</strong><br><br>${clean(result.context).slice(0,3000)}`;
+  $('reference').classList.remove('hidden');
+};
+
+$('next').onclick=()=>{
+  if(state.current+1>=state.questions.length){
+    const checked=state.answers.filter(x=>typeof x==='number');
+    const avg=checked.length?checked.reduce((a,b)=>a+b,0)/checked.length:0;
+
+    $('test').classList.add('hidden');
+    $('resultCard').classList.remove('hidden');
+    $('result').innerHTML=`<div class="score">${checked.length?Math.round(avg*100)+'%':'—'}</div><p>Проверено ответов: ${checked.length} из ${state.questions.length}. Пропущенные вопросы не считаются ошибкой.</p>`;
+    window.scrollTo({top:$('resultCard').offsetTop-20,behavior:'smooth'});
+    return;
+  }
+
+  state.current++;
+  renderQuestion();
+};
+
+$('restart').onclick=()=>{
+  $('resultCard').classList.add('hidden');
+  $('test').classList.add('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+
+$('resetStats').onclick=()=>{
+  if(confirm('Сбросить локальную статистику использования этого браузера?')){
+    resetStats();
+  }
+};
+
+loadIndex();
