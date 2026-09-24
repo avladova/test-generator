@@ -1,5 +1,5 @@
 {
-  "version": "5.2",
+  "version": "5.5",
   "source": "В. И. Соловьев. Анализ данных в экономике. Москва: КНОРУС, 2018.",
   "source_pdf": "Соловьев Анализ Данных учебник сжатый.pdf",
   "pages_count": 479,
@@ -9,11 +9,13 @@
     "toc_based_boundaries": true,
     "actual_heading_boundaries": true,
     "theory_first": true,
+    "semantic_context": true,
     "conservative_definitions": true,
     "conservative_formulas": true,
     "examples_tasks_excluded": true,
     "answer_sections_excluded": true,
     "excel_formula_examples_excluded": true,
+    "pdf_artifacts_filtered": true,
     "deterministic": true,
     "no_llm_required": true
   },
