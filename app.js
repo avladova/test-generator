@@ -5,7 +5,8 @@ const state={
   questions:[],
   current:0,
   answers:[],
-  currentTopic:null
+  currentTopic:null,
+  graph:null
 };
 
 const $=id=>document.getElementById(id);
@@ -126,6 +127,99 @@ function topicOverrides(sec){
   return out;
 }
 
+async function loadConceptGraph(){
+  try{
+    const r=await fetch('data/concept_graph.json',{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    state.graph=await r.json();
+  }catch(e){
+    console.warn('Concept graph unavailable:',e);
+    state.graph=null;
+  }
+}
+
+function graphContextFor(sec){
+  const g=state.graph;
+  if(!g?.nodes || !g?.edges) return {text:'',concepts:[]};
+
+  const sectionNode=g.nodes.find(n=>n.type==='section' && n.section_id===sec.id);
+  if(!sectionNode) return {text:'',concepts:[]};
+
+  const direct=g.edges.filter(e=>e.from===sectionNode.id && e.relation==='covers').map(e=>e.to);
+  const ids=new Set(direct);
+
+  // Expand only one semantic hop from concepts of the selected section.
+  g.edges.forEach(e=>{
+    if(ids.has(e.from) && ['requires','defined_using','calculated_from','uses','helps_detect','checked_against','measured_by','contrasts_with'].includes(e.relation))
+      ids.add(e.to);
+    if(ids.has(e.to) && ['requires','defined_using','calculated_from','uses','helps_detect','checked_against','measured_by','contrasts_with'].includes(e.relation))
+      ids.add(e.from);
+  });
+
+  const relatedSectionIds=new Set();
+  g.edges.forEach(e=>{
+    if(ids.has(e.from) || ids.has(e.to)){
+      const target=[e.from,e.to];
+      target.forEach(id=>{
+        const n=g.nodes.find(x=>x.id===id);
+        if(n?.type==='section' && n.section_id!==sec.id) relatedSectionIds.add(n.section_id);
+      });
+    }
+  });
+
+  const sections=state.index?.sections||[];
+  const related=sections.filter(x=>relatedSectionIds.has(x.id)).slice(0,4);
+  const ordered=[sec,...related];
+  const chunks=[],seen=new Set();
+
+  ordered.forEach(x=>{
+    (x.theory||[]).forEach(t=>{
+      const v=clean(t);
+      if(v.length>=45 && !seen.has(v)){
+        seen.add(v); chunks.push(v);
+      }
+    });
+    (x.concepts||[]).forEach(c=>{
+      if(validConcept(c)){
+        const v=clean(c.definition);
+        if(!seen.has(v)){seen.add(v);chunks.push(v);}
+      }
+    });
+    (x.formulas||[]).forEach(f=>{
+      if(validFormula(f)){
+        const v=clean((f.name?f.name+': ':'')+f.formula+(f.explanation?' — '+f.explanation:''));
+        if(!seen.has(v)){seen.add(v);chunks.push(v);}
+      }
+    });
+  });
+
+  const concepts=[...ids].map(id=>g.nodes.find(n=>n.id===id))
+    .filter(n=>n && n.type!=='section')
+    .map(n=>n.name);
+
+  return {
+    text:chunks.slice(0,14).join('\n\n'),
+    concepts:[...new Set(concepts)]
+  };
+}
+
+function enrichQuestionWithGraph(q,sec){
+  const gx=graphContextFor(sec);
+  if(!gx.text) return q;
+
+  return {
+    ...q,
+    reference:[q.reference,gx.text].filter(Boolean).join('\n\n'),
+    graph_context:gx.text,
+    graph_concepts:gx.concepts,
+    answer_spec:{
+      type:q.type,
+      expected:q.expected,
+      required_terms:[...(q.keys||[]),...gx.concepts].slice(0,20)
+    }
+  };
+}
+
 function makeQuestions(sec){
   const override=topicOverrides(sec);
   if(override.length)return override;
@@ -186,7 +280,7 @@ function shuffle(a){
 function generate(sec,n){
   const pool=makeQuestions(sec);
   if(pool.length<n)return null;
-  return shuffle(pool).slice(0,n);
+  return shuffle(pool).slice(0,n).map(q=>enrichQuestionWithGraph(q,sec));
 }
 
 /* ---------- Формульная проверка ---------- */
@@ -331,71 +425,85 @@ function resetStats(){
 
 /* ---------- Оценивание ---------- */
 
+function essentialTerms(text){
+  const counts=new Map();
+  words(text).filter(w=>!STOP.has(w) && w.length>=4).forEach(w=>{
+    const k=stem(w);
+    counts.set(k,(counts.get(k)||0)+1);
+  });
+  return [...counts.entries()]
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,14)
+    .map(x=>x[0]);
+}
+
+function copiedQuestionPenalty(answer,question){
+  const a=keyset(answer), q=keyset(question);
+  if(!a.size || !q.size) return 0;
+  let hit=0; q.forEach(x=>{if(a.has(x))hit++;});
+  const ratio=hit/q.size;
+  return ratio>.75 ? Math.min(.35,(ratio-.75)*1.4) : 0;
+}
+
 function evaluate(answer,q){
   const a=clean(answer);
-
-  if(!a){
-    return{score:0,label:'Ответ не введён',cls:'partial'};
-  }
+  if(!a) return {score:0,label:'Ответ не введён',cls:'partial'};
 
   if(q.type==='formula'){
     const formulaExpected=q.formula_answer||q.expected||'';
     const formulaOk=formulasEquivalent(a,formulaExpected);
-    const explanationPart=clean(q.expected||'').replace(formulaExpected,'');
-    let explanationScore=0;
 
-    if(explanationPart.length>20){
-      const A=keyset(a),C=keyset(explanationPart);
-      let matched=0;
-      C.forEach(x=>{if(A.has(x))matched++;});
-      explanationScore=C.size?matched/C.size:0;
-    }
+    const exp=clean(q.expected||'').replace(formulaExpected,'');
+    const required=essentialTerms(exp);
+    const A=keyset(a);
+    const matched=required.filter(x=>A.has(x)).length;
+    const explanationCoverage=required.length?matched/required.length:0;
 
-    const score=formulaOk
-      ?Math.min(1,0.75+explanationScore*0.25)
-      :Math.max(0,explanationScore*0.35);
+    let score;
+    if(formulaOk) score=.72+.28*explanationCoverage;
+    else score=.30*explanationCoverage;
 
-    const label=formulaOk?'Зачтено':'Не зачтено';
-    const cls=formulaOk?'good':'bad';
-
-    return{
-      score,
-      label,
-      cls,
-      context:q.expected||q.reference||'',
-      formulaOk
+    return {
+      score:Math.max(0,Math.min(1,score)),
+      label:formulaOk?'Формула зачтена':'Формула не зачтена',
+      cls:formulaOk?'good':(explanationCoverage>=.35?'partial':'bad'),
+      formulaOk,
+      matched,
+      total:required.length,
+      missing:required.filter(x=>!A.has(x)).slice(0,8),
+      context:q.reference||q.expected||''
     };
   }
 
-  const A=keyset(a),
-    C=keyset(q.expected||q.reference||''),
-    expectedWords=[...C].filter(x=>x.length>=4);
+  const expected=q.expected||q.reference||'';
+  const A=keyset(a);
+  const terms=essentialTerms(expected);
+  const matched=terms.filter(x=>A.has(x)).length;
+  const coverage=terms.length?matched/terms.length:0;
 
-  let matched=0;
-  expectedWords.forEach(x=>{if(A.has(x))matched++;});
+  const required=(q.keys||[]).map(stem).filter(Boolean);
+  const requiredHit=required.filter(x=>A.has(x));
+  const requiredCoverage=required.length?requiredHit.length/required.length:coverage;
 
-  const coverage=expectedWords.length?matched/expectedWords.length:0;
-  const named=(q.keys||[]).filter(x=>A.has(stem(x))).length;
-  const namedCoverage=q.keys?.length?named/q.keys.length:0;
-  const sim=overlap(a,q.expected||q.reference||'');
-  const qsim=overlap(a,q.question);
+  const repetitionPenalty=copiedQuestionPenalty(a,q.question);
 
-  let score=Math.max(coverage*1.35,namedCoverage*1.15,sim*.95);
-  score-=Math.min(.35,qsim*.65);
-  if(words(a).length<3)score-=.08;
+  // Для определения/условия важнее наличие существенных признаков,
+  // для сравнения — наличие признаков обеих сторон, заданных в вопросе.
+  let score=.72*coverage+.28*requiredCoverage-repetitionPenalty;
+  if(words(a).length<5) score-=.08;
+
   score=Math.max(0,Math.min(1,score));
 
   let label='Не зачтено',cls='bad';
-  if(score>=.55){label='Зачтено';cls='good';}
-  else if(score>=.30){label='Частично';cls='partial';}
+  if(score>=.65){label='Зачтено';cls='good';}
+  else if(score>=.38){label='Частично';cls='partial';}
 
-  return{
-    score,
-    label,
-    cls,
+  return {
+    score,label,cls,
     matched,
-    total:expectedWords.length,
-    context:q.expected||q.reference||''
+    total:terms.length,
+    missing:terms.filter(x=>!A.has(x)).slice(0,8),
+    context:q.reference||expected
   };
 }
 
@@ -445,6 +553,7 @@ async function loadIndex(){
     $('start').disabled=false;
     $('status').textContent=`Индекс ${state.index.version||''} загружен: ${state.index.source||'фиксированный источник'}. Разделов: ${secs.length}.`;
 
+    await loadConceptGraph();
     renderStats();
   }catch(e){
     $('status').innerHTML=`<strong>Не удалось загрузить индекс.</strong><br>Проверьте путь <code>${INDEX_PATH}</code> и публикацию GitHub Pages.<br><small>${clean(e.message)}</small>`;
@@ -488,12 +597,15 @@ $('check').onclick=()=>{
   registerCheckedAnswer();
 
   const formulaNote=q.type==='formula'
-    ?`<br><small>${result.formulaOk?'Формула распознана как математически эквивалентная эталонной записи.':'Формула не распознана как эквивалентная эталонной записи. Проверьте скобки, знаки операций и обозначения.'}</small>`
+    ?`<br><small>${result.formulaOk?'Формула распознана как математически эквивалентная эталонной записи.':'Формула не распознана как эквивалентная эталонной записи.'}</small>`
+    :'';
+  const missingNote=result.missing?.length
+    ?`<div class="missing"><strong>Не хватает ключевых элементов:</strong> ${result.missing.join(', ')}</div>`
     :'';
 
-  $('feedback').innerHTML=`<div class="feedback ${result.cls}"><div class="score">${Math.round(result.score*100)}%</div><strong>${result.label}</strong>${formulaNote}<br><small>Ответ сопоставлен с эталонным содержанием именно этого вопроса.</small></div>`;
+  $('feedback').innerHTML=`<div class="feedback ${result.cls}"><div class="score">${Math.round(result.score*100)}%</div><strong>${result.label}</strong>${formulaNote}${missingNote}<br><small>Оценка основана на ключевых содержательных элементах эталонного ответа, а не только на совпадении отдельных слов.</small></div>`;
 
-  $('reference').innerHTML=`<strong>Основа проверки:</strong><br><br>${clean(result.context).slice(0,3000)}`;
+  $('reference').innerHTML=`<strong>Теоретический контекст для проверки:</strong><br><br>${clean(result.context).slice(0,6000)}`;
   $('reference').classList.remove('hidden');
 };
 
