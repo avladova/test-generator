@@ -36,6 +36,28 @@ function keyset(s){
   return new Set(words(s).filter(w=>!STOP.has(w)).map(stem));
 }
 
+function normalizeRubricText(s){
+  let x=clean(s).toLowerCase();
+  x=x.replace(/\bq\s*3\b/g,' третья квартиль ');
+  x=x.replace(/\bq\s*1\b/g,' первая квартиль ');
+  x=x.replace(/\b3[-–—]?й\s+квартил/gi,' третья квартил');
+  x=x.replace(/\b1[-–—]?й\s+квартил/gi,' первая квартил');
+  x=x.replace(/\b3\b(?=\s+(?:и\s+)?1\s+квартил)/g,' третья ');
+  x=x.replace(/\b1\b(?=\s+квартил)/g,' первая ');
+  return x;
+}
+
+function rubricHit(answer, alternatives){
+  const A=keyset(normalizeRubricText(answer));
+  return alternatives.some(term=>{
+    const parts=words(normalizeRubricText(term))
+      .filter(w=>!STOP.has(w))
+      .map(stem);
+    if(!parts.length)return false;
+    return parts.every(p=>A.has(p));
+  });
+}
+
 function overlap(a,b){
   const A=keyset(a),B=keyset(b);
   if(!A.size||!B.size)return 0;
@@ -92,19 +114,13 @@ function topicOverrides(sec){
   }
 
   if(title==='Диаграммы размаха'){
-    const ctx=`Медиана делит организованный в порядке неубывания ряд значений признака X на две половины. Квартили — числа, делящие организованный ряд значений признака X на четыре равные по численности части: 25% значений не больше первой, 50% — не больше второй, 75% — не больше третьей квартили; вторая квартиль совпадает с медианой.
+    const ctx=`Квартили делят организованный ряд значений признака X на четыре равные по численности части: 25% значений не больше первой квартили, 50% — не больше второй, 75% — не больше третьей квартили; вторая квартиль совпадает с медианой.
 
-Чтобы найти квартили, сначала располагают значения признака в порядке неубывания и находят медиану — среднюю квартиль x₀,₅₀. Затем находят медиану для части значений, не больших медианы, — нижнюю квартиль x₀,₂₅, и медиану для части значений, не меньших медианы, — верхнюю квартиль x₀,₇₅.
-
-Межквартильный размах IQR = x₀,₇₅ − x₀,₂₅ служит характеристикой разброса значений признака. Значения, не попадающие в отрезок [x₀,₂₅ − 1,5IQR; x₀,₇₅ + 1,5IQR], называются выбросами.
-
-Для визуализации распределения данных по квартилям используется диаграмма размаха («ящик с усами»). «Ящик» — прямоугольник, нижняя и верхняя границы которого соответствуют нижней и верхней квартилям. Внутри ящика на уровне медианы проводят линию, а среднее значение отмечают крестиком. «Усы» определяют границы основного диапазона значений; выбросы отмечаются отдельными точками.
-
-По диаграмме размаха можно увидеть типичные значения признака: половина значений находится в ящике, а практически все значения, кроме выбросов, — в границах усов. Если медиана и среднее совпадают и находятся примерно посередине ящика, это говорит в пользу симметричности распределения; смещение медианы к одному из концов ящика или различие длины верхнего и нижнего усов указывает на скошенность распределения.`;
+Межквартильный размах IQR определяется как разность между третьей и первой квартилями: IQR = x₀,₇₅ − x₀,₂₅. Он служит характеристикой разброса значений признака. Для его вычисления из значения третьей квартили вычитают значение первой квартили.`;
 
     add(out,'Что такое межквартильный размах IQR и что он характеризует?',`
 Межквартильный размах определяется формулой IQR = x₀,₇₅ − x₀,₂₅ и служит характеристикой разброса значений изучаемого признака.
-`,ctx,['iqr','x₀,₇₅','x₀,₂₅','разброс'],'theory',sec,{context:ctx,rubric:[['iqr'],['x₀,₇₅','верхн','треть'],['x₀,₂₅','нижн','перв'],['разброс']]});
+`,ctx,['iqr','x₀,₇₅','x₀,₂₅','разброс'],'theory',sec,{context:ctx,rubric:[['разност','разниц','различ'],['x₀,₇₅','верхн','треть','третья квартиль'],['x₀,₂₅','нижн','перв','первая квартиль'],['разброс','характеристик разброс']]});
 
     add(out,'Какие элементы показывает диаграмма размаха и что означает каждый из них?',`
 Диаграмма размаха содержит ящик, медиану, среднее, усы и, при наличии, отдельные точки-выбросы. Нижняя и верхняя границы ящика соответствуют нижней и верхней квартилям; линия внутри ящика соответствует медиане; среднее отмечается крестиком; усы задают границы основного диапазона значений; выбросы отмечаются отдельными точками.
@@ -323,12 +339,36 @@ function graphContextFor(sec){
   };
 }
 
+function buildQuestionContext(q,sec,gx){
+  const target=clean([q.question,q.expected,(q.keys||[]).join(' '),(gx?.concepts||[]).join(' ')].join(' '));
+  const candidates=[];
+  const push=(text)=>{
+    const v=clean(text);
+    if(v.length<45)return;
+    const score=overlap(target,v);
+    if(score>0)candidates.push({text:v,score});
+  };
+  (sec.theory||[]).forEach(push);
+  (sec.concepts||[]).forEach(x=>{ if(validConcept(x)) push(x.definition); });
+  (sec.formulas||[]).forEach(x=>{ if(validFormula(x)) push([x.name,x.formula,x.explanation].filter(Boolean).join(': ')); });
+  candidates.sort((a,b)=>b.score-a.score);
+  const selected=[],seen=new Set();
+  for(const item of candidates){
+    if(seen.has(item.text))continue;
+    selected.push(item.text); seen.add(item.text);
+    if(selected.length>=4)break;
+  }
+  return selected.join('\n\n');
+}
+
 function enrichQuestionWithGraph(q,sec){
   const gx=graphContextFor(sec);
   if(!gx.text) return q;
 
+  const focusedContext=q.context || buildQuestionContext(q,sec,gx) || q.reference || gx.text;
   return {
     ...q,
+    context:focusedContext,
     reference:[q.reference,gx.text].filter(Boolean).join('\n\n'),
     graph_context:gx.text,
     graph_concepts:gx.concepts,
@@ -574,7 +614,7 @@ function evaluate(answer,q){
     const formulaOk=formulasEquivalent(a,formulaExpected);
     const rubric=q.rubric||[];
     const A=keyset(a);
-    const matched=rubric.filter(group=>group.some(term=>A.has(stem(term)) || A.has(stem(term.toLowerCase())))).length;
+    const matched=rubric.filter(group=>rubricHit(a,group)).length;
     const coverage=rubric.length?matched/rubric.length:0;
     const score=formulaOk ? .65+.35*coverage : .25*coverage;
     return {
@@ -589,7 +629,7 @@ function evaluate(answer,q){
 
   const A=keyset(a);
   if(Array.isArray(q.rubric) && q.rubric.length){
-    const hits=q.rubric.map(group=>group.some(term=>A.has(stem(term))));
+    const hits=q.rubric.map(group=>rubricHit(a,group));
     const coverage=hits.filter(Boolean).length/q.rubric.length;
     let score=coverage;
     if(words(a).length<5) score-=.10;
